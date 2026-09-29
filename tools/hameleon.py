@@ -35,10 +35,12 @@ paper copy that settles there would otherwise never be cleared (that cost
 import sys
 
 
-def hameleon(step=1547, gap=111, aim=10, sstep=3044, soff=1, doff=4000, key=7,
-             first=1, tscan=3, tstone=2, name="Хамелеон"):
-    t0, t1 = (tscan, tstone) if first == 0 else (tstone, tscan)
-    scanner = [
+def scanner_code(step=1547, aim=10):
+    """Ледоход's scanner (neva-sandbox), 26 cells: three probe pairs a loop,
+    an SPL carpet round the core up to the warrior, then an endless DAT pass
+    from right after its own cells. Uses LEN (the warrior's length), SLEN
+    (the scanner's), GAP and PB0 (the first probe's base)."""
+    return [
         ("ptr", "DAT.F   #PB0+GAP, #PB0"),
         ("inc", f"DAT.F   #{step}, #{step}"),
         ("scan", "ADD.F   inc, ptr"),
@@ -66,12 +68,24 @@ def hameleon(step=1547, gap=111, aim=10, sstep=3044, soff=1, doff=4000, key=7,
         ("sb", "SPL.B   #0, #0"),
         ("cnt", "DAT.F   $0, $0"),
     ]
-    stone = [
+
+
+def stone_code(sstep=3044, soff=1):
+    """The invisible stone: three cells, the pointer in the JMP's B-field,
+    bombs DAT.F $0, $0 that a CMP scanner cannot tell from an empty cell."""
+    return [
         ("sloop", f"ADD.AB  #{sstep}, sjp"),
         ("", "MOV.I   sbomb, @sjp"),
         ("sjp", f"JMP     sloop, #{soff}"),
         ("sbomb", "DAT.F   $0, $0"),
     ]
+
+
+def hameleon(step=1547, gap=111, aim=10, sstep=3044, soff=1, doff=4000, key=7,
+             first=1, tscan=3, tstone=2, name="Хамелеон"):
+    t0, t1 = (tscan, tstone) if first == 0 else (tstone, tscan)
+    scanner = scanner_code(step, aim)
+    stone = stone_code(sstep, soff)
     brain = [
         ("brain", "LDP.AB  #0, res"),
         ("", f"LDP.AB  #{key}, sel"),
