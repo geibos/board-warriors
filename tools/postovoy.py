@@ -30,8 +30,14 @@ Keys:
   k=5                 2**k paper processes
   d1=2365 d2=1870     the paper's two copy distances
   j=-1922             the paper's jump back
+  bomb='DAT.F   <2667, <5334'
+                      the paper's bomb
   key=7               P-space cells from key on
   guard=1             0: the brain keeps its STPs (as Светофор does)
+  clear=0             1: instead of the scanner, a clear with no search: the
+                      scanner's SPL carpet, then DAT, round the whole core;
+                      2: both, the scanner first, the clear when the scanner
+                      runs out of trust, then paper again
   step=1547 gap=111 aim=10
                       the scanner (Ледоход's constants, neva-sandbox)
 """
@@ -42,8 +48,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from hameleon import scanner_code  # noqa: E402
 
 
+BOMB = "DAT.F   <2667, <5334"
+
+
 def postovoy(T=5, U0=3, UMAX=6, k=5, d1=2365, d2=1870, j=-1922, key=7, step=1547, gap=111,
-             aim=10, name="Постовой", guard=1, R=15):
+             aim=10, name="Постовой", guard=1, R=15, bomb=BOMB, clear=0):
     scanner = scanner_code(step, aim)
     brain = [
         ("brain", "LDP.AB  #0, res"),
@@ -80,7 +89,16 @@ def postovoy(T=5, U0=3, UMAX=6, k=5, d1=2365, d2=1870, j=-1922, key=7, step=1547
         ("", "JMP     keep"),
         ("sloss", "SUB.AB  #1, tru"),
         ("", "JMN.B   keep, tru"),
-        ("", "MOV.AB  #0, sel"),
+    ] + ([
+        # Both weapons: out of trust, the scanner hands over to the clear
+        # (mode 2) with fresh trust; out of trust, the clear back to paper.
+        ("", "SEQ.AB  #1, sel"),
+        ("", "JMP     topaper"),
+        ("", "MOV.AB  #2, sel"),
+        ("", f"MOV.AB  #{U0}, tru"),
+        ("", "JMP     keep"),
+    ] if clear == 2 else []) + [
+        ("topaper" if clear == 2 else "", "MOV.AB  #0, sel"),
         ("", "MOV.AB  #0, tcnt"),
         ("keep", f"STP.B   sel, #{key}"),
         ("", f"STP.B   tcnt, #{key + 1}"),
@@ -93,7 +111,17 @@ def postovoy(T=5, U0=3, UMAX=6, k=5, d1=2365, d2=1870, j=-1922, key=7, step=1547
         ("", "MOV.I   kill, keep+2"),
     ] if guard else []) + [
         ("", "JMZ.B   pstart, sel"),
+    ] + ([
+        ("", "SNE.AB  #1, sel"),
         ("", "JMP     scan"),
+    ] if clear == 2 else []) + ([
+        # A clear instead of the scanner: no search, the scanner's carpet
+        # from just past the scanner round the core, SPL first, then DAT.
+        ("", "MOV.A   #SLEN, ptr"),
+        ("", "JMP     carpet"),
+    ] if clear else [
+        ("", "JMP     scan"),
+    ]) + [
         ("res", "DAT.F   $0, $0"),
         ("sel", "DAT.F   $0, $0"),
         ("tcnt", "DAT.F   $0, $0"),
@@ -107,7 +135,7 @@ def postovoy(T=5, U0=3, UMAX=6, k=5, d1=2365, d2=1870, j=-1922, key=7, step=1547
         ("", "MOV.I   pbomb, >-2"),
         ("", "MOV.I   {-3, <1"),
         ("", f"JMP     @0, {j}"),
-        ("pbomb", "DAT.F   <2667, <5334"),
+        ("pbomb", bomb),
     ]
     code = scanner + brain + paper
     n = len(code)
@@ -119,7 +147,8 @@ def postovoy(T=5, U0=3, UMAX=6, k=5, d1=2365, d2=1870, j=-1922, key=7, step=1547
 ;strategy to {UMAX}, a loss or a tie takes one; at zero it is back to paper).{f"""
 ;strategy Out of trust, it gets one more try after {R} ties in a row.""" if R else ""}
 ;strategy Paper: the Silk scheme, {2 ** k} processes, distances {d1} and {d2}, jump {j}
-;strategy (1870 and the jump as in Позитив by xboss-xoxomo), placed last.
+;strategy (1870 and the jump as in Позитив by xboss-xoxomo), placed last.{f"""
+;strategy The paper's bomb: {" ".join(bomb.split())}.""" if bomb != BOMB else ""}
 ;strategy Scanner: design and constants from Ледоход by neva-sandbox.
 ;strategy The brain writes P-space once a round and then erases its STPs: a stray
 ;strategy process in a copy of the brain would otherwise store bombed cells.
@@ -138,5 +167,5 @@ if __name__ == "__main__":
     kw = {}
     for a in sys.argv[1:]:
         key, value = a.split("=", 1)
-        kw[key] = value if key == "name" else int(value)
+        kw[key] = value if key in ("name", "bomb") else int(value)
     sys.stdout.write(postovoy(**kw))
