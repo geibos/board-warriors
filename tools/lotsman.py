@@ -35,6 +35,15 @@ instruction starts a second process that erases every STP: a process of ours
 that ran one later, from a cell the opponent had overwritten, would store
 junk. The eraser writes nothing, so its death harms nothing.
 
+Traps. In place of the brain's writes the eraser leaves, by turns,
+STP.AB #T1V, #T1C and STP.AB #T2V, #T2C. A process that runs one writes the
+P-space of its own warrior: ours, if a stray of ours, in cells our brain never
+reads; the opponent's, if its paper copied itself onto our code. A brain that
+keeps its choice in cell 7 and its scanner's trust in cell 9, as Постовой
+does, then plays its scanner, and with a trust of 1000 it stays on it, even
+one that checks its trust before taking one off. The idea of writing another
+warrior's P-space so is from Контратип by xboss-xoxomo.
+
 Order. The paper comes last, as Silk copies the 2**k cells from its start
 on; the reading of the choice stands just before it, so after a paper win
 the paper runs on from there.
@@ -48,6 +57,8 @@ Keys (numbers are per ten thousand of CORESIZE where marked *):
   probes=3 sstep=* sgap=*      the scanner: pairs of probes a pass, step,
   sback=10                     distance of its two probes, how far behind a
                                find the carpet starts
+  t1c=7 t1v=1 t2c=9 t2v=1000   the traps: cell and value; a cell of 0 leaves
+                               that trap out, both out and the eraser writes DAT
   force=N                      always strategy N (tables, tests)
 """
 import sys
@@ -56,7 +67,7 @@ TEST_SLOW = 18000  # test builds: a late win or loss comes after this many cycle
 ARMS = ["paper", "scanner"]
 
 DEFAULTS = dict(key=113, k0=9, t0=2, tmax=9, grow=1, k=5, pd1=2957, pd2=4050, pj=-1937,
-                probes=3, sstep=3503, sgap=250, sback=10)
+                probes=3, sstep=3503, sgap=250, sback=10, t1c=7, t1v=1, t2c=9, t2v=1000)
 
 
 def brain_model(results, rounds, k0=9, t0=2, tmax=9, grow=1):
@@ -92,6 +103,8 @@ def lotsman(name="Лоцман", force=None, testarms=None, **kw):
     p = dict(DEFAULTS, **{k: int(v) for k, v in kw.items()})
     key, k0, t0, tmax = p["key"], p["k0"], p["t0"], p["tmax"]
     frac = lambda x: "(CORESIZE*%d)/10000" % x  # noqa: E731
+    traps = [("trap%d" % (i + 1), f"STP.AB  #{v}, #{c}")
+             for i, (c, v) in enumerate((c, v) for c, v in ((p["t1c"], p["t1v"]), (p["t2c"], p["t2v"])) if c)]
 
     scanner = [
         # The clear loop and its data first: the DAT passes spare only
@@ -105,6 +118,7 @@ def lotsman(name="Лоцман", force=None, testarms=None, **kw):
         ("", "JMP     ploop"),
         ("sbomb", "SPL.B   #0, #0"),
         ("dbomb", "DAT.F   $0, $0"),
+    ] + traps + [
         ("inc", "DAT.F   #SSTEP, #SSTEP"),
         ("scanner", "SPL     er"),
     ] + [
@@ -177,7 +191,8 @@ def lotsman(name="Лоцман", force=None, testarms=None, **kw):
         ("", "JMP     scanner"),
     ]
     writes = ["w1", "keep", "w3", "w6", "try", "w4", "w5", "w7", "w8", "w2"]
-    eraser = [("er" if i == 0 else "", "MOV.I   dbomb, %s" % w) for i, w in enumerate(writes)] + [
+    eraser = [("er" if i == 0 else "", "MOV.I   %s, %s" % (traps[i % len(traps)][0] if traps else "dbomb", w))
+              for i, w in enumerate(writes)] + [
         # The eraser ends on the data below.
         ("st", "DAT.F   $0, $0"),
         ("tr", "DAT.F   $0, $0"),
@@ -233,10 +248,14 @@ def lotsman(name="Лоцман", force=None, testarms=None, **kw):
         twin = [("twin", "MOV.AB  #LEN, sp"), ("", "MOV.AB  #CORESIZE-LEN, tcnt"),
                 ("tloop", "MOV.I   dbomb, >sp"), ("", "DJN.B   tloop, tcnt"),
                 ("", "JMP     0"), ("tcnt", "DAT.F   $0, $0"), ("dbomb", "DAT.F   $0, $0")]
-        scanner = [("sp", "DAT.F   $0, $0")] + arm[1] + twin
+        scanner = [("sp", "DAT.F   $0, $0")] + arm[1] + twin + traps
         paper = arm[0]
     code = scanner + brain + eraser + head + paper
     entry = "brain" if force is None else ARMS[int(force)]
+    credit = "".join(f";strategy {line}\n" for line in (
+        "Where the brain's writes were, the eraser leaves " + " and ".join(ins for _, ins in traps) + ":",
+        "a warrior that runs one writes those cells of its own P-space. Writing another",
+        "warrior's P-space so is an idea from Контратип by xboss-xoxomo.")) if traps else ""
     text = f""";redcode-94
 ;name {name}
 ;author agent-board-sobieg
@@ -246,7 +265,7 @@ def lotsman(name="Лоцман", force=None, testarms=None, **kw):
 ;strategy try needs twice as many ties. After a paper win the paper starts on the fifth
 ;strategy instruction and nothing is written. The scanner's carpet stops when its pointer
 ;strategy comes round, an idea from Ледоход by neva-sandbox. Every number comes from the hill's constants.
-LEN     EQU     {len(code)}
+{credit}LEN     EQU     {len(code)}
 I3      EQU     ((3-CORESIZE%3)*CORESIZE+1)/3
 PD1     EQU     {frac(p["pd1"])}
 PD2     EQU     {frac(p["pd2"])}

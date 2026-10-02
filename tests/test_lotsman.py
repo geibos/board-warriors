@@ -49,6 +49,11 @@ class Text(unittest.TestCase):
         # Ледоход: the published text says so.
         self.assertRegex(lotsman.lotsman(), r"(?m)^;strategy .*Ледоход by neva-sandbox")
 
+    def test_the_warrior_credits_the_trap(self):
+        # Writing another warrior's P-space through a cell it runs: the
+        # published text says whose idea it is.
+        self.assertRegex(lotsman.lotsman(), r"(?m)^;strategy .*Контратип by xboss-xoxomo")
+
     def test_the_brain_model_tries_the_scanner_after_ties_in_a_row(self):
         # Paper ties, the scanner loses: a try of two rounds after 9 ties,
         # the next after 18, then after 36.
@@ -100,16 +105,42 @@ class Text(unittest.TestCase):
 
     def test_every_p_space_write_is_erased_by_the_eraser(self):
         # A process of ours that ran an STP later, from a cell the opponent
-        # had overwritten, would store junk: the eraser erases them all.
+        # had overwritten, would store junk: the eraser erases them all. The
+        # traps are data the brain never runs.
         start, code, at = self.code()
-        stps = {n for n, ln in enumerate(code) if ln[8:].startswith("STP")}
+        stps = {n for n, ln in enumerate(code) if ln[8:].startswith("STP") and not ln.startswith("trap")}
         erased = set()
         for ln in code:
-            m = re.match(r"MOV\.I\s+dbomb,\s+(\w+)(?:\+(\d+))?$", ln[8:].strip())
+            m = re.match(r"MOV\.I\s+(?:dbomb|trap\d),\s+(\w+)(?:\+(\d+))?$", ln[8:].strip())
             if m:
                 erased.add(at[m.group(1)] + int(m.group(2) or 0))
         self.assertTrue(stps)
         self.assertEqual(stps - erased, set())
+
+    def test_the_eraser_leaves_traps_where_the_brain_wrote(self):
+        # In place of the brain's writes, by turns, STP.AB #1, #7 and
+        # STP.AB #1000, #9: a brain that keeps its choice in cell 7 and its
+        # scanner's trust in cell 9, as Постовой does, and runs one plays its
+        # scanner, and with that much trust it stays on it.
+        start, code, at = self.code()
+        traps = [ln[8:].strip() for ln in code if ln.startswith("trap")]
+        self.assertEqual(traps, ["STP.AB  #1, #7", "STP.AB  #1000, #9"])
+        erased = [re.match(r"MOV\.I\s+(\w+),", ln[8:].strip()).group(1)
+                  for ln in code[at["er"]:at["er"] + 10]]
+        self.assertEqual(erased, ["trap1", "trap2"] * 5)
+
+    def test_the_traps_write_no_cell_our_brain_reads(self):
+        # A process of ours that runs a trap changes nothing we read: not the
+        # result, not the brain's cells, not the test builds' counters.
+        key = lotsman.DEFAULTS["key"]
+        ours = {0} | {key + i for i in range(4)} | {key + 20, key + 21}
+        cells = {lotsman.DEFAULTS["t1c"], lotsman.DEFAULTS["t2c"]}
+        self.assertEqual(cells & ours, set())
+
+    def test_without_traps_the_eraser_writes_dat(self):
+        text = lotsman.lotsman(t1c=0, t2c=0)
+        self.assertNotIn("trap", text)
+        self.assertRegex(text, r"(?m)^er\s+MOV\.I\s+dbomb, w1$")
 
     def test_after_a_win_the_start_of_a_round_writes_nothing(self):
         # The fast path only reads.
@@ -184,6 +215,45 @@ class Strategies(unittest.TestCase):
     def test_the_paper_beats_a_dwarf(self):
         r = self.pair(0, os.path.join(TESTDATA, "dwarf.red"))
         self.assertGreater(r["w1"], r["w2"])
+
+    def versus(self, opponent, seeds=4):
+        """Points a match, with traps and without, against one opponent's
+        text, on season two's rules (512 rounds), mean over the seeds."""
+        files = []
+        for name, kw in (("Traps", {}), ("Plain", {"t1c": 0, "t2c": 0})):
+            path = os.path.join(self.tmp, name + ".red")
+            with open(path, "w") as fh:
+                fh.write(lotsman.lotsman(name=name, **kw))
+            files.append(path)
+        opp = os.path.join(self.tmp, "opp.red")
+        with open(opp, "w") as fh:
+            # As at season two's seeding: without the assert on a core of 8000.
+            fh.write(opponent.replace(";assert CORESIZE == 8000\n", ""))
+        r = run(["versus"] + files + ["--against", opp, "--seeds", str(seeds), "--salt", "1",
+                                      "--rounds", "512", "--json"] + HILLS["s2"])
+        pts = {}
+        for m in json.loads(r.stdout)["matches"]:
+            x = m["result"]
+            pts.setdefault(m["a"], []).append(3 * x["w1"] + x["ties"])
+        return [sum(pts[i]) / len(pts[i]) for i in range(len(files))]
+
+    def test_the_traps_send_postovoy_to_its_scanner(self):
+        import postovoy
+        traps, plain = self.versus(postovoy.postovoy())
+        self.assertGreater(traps, plain + 300)
+
+    def test_the_trust_trap_works_on_a_brain_that_checks_its_trust(self):
+        # Постовой with its trust checked before one is taken: the choice
+        # alone would send it back to paper at once, the trust keeps it on
+        # its scanner.
+        import postovoy
+        text = postovoy.postovoy()
+        old = "sloss   SUB.AB  #1, tru\n        JMN.B   keep, tru\n        MOV.AB  #0, sel\n"
+        self.assertIn(old, text)
+        fixed = text.replace(old, "sloss   JMZ.B   sl0, tru\n        DJN.B   keep, tru\n"
+                                  "sl0     MOV.AB  #0, sel\n")
+        traps, plain = self.versus(fixed)
+        self.assertGreater(traps, plain + 300)
 
 
 @unittest.skipUnless(HAVE_CW, "needs cw")
