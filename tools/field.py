@@ -19,7 +19,7 @@ robust     the average score over N random placements (`cw pair --seed`)
 standings  `robust` for the hill's own members: is the order a property of
            the warriors or of the placements?
 
-cw is $CW, or `cw` on PATH (a release of github.com/geibos/board-corewar).
+cw is $CW, or `cw` on PATH (a release of github.com/geibos/corewar).
 """
 import argparse
 import json

@@ -2,7 +2,7 @@
 
 Наши бойцы для хилла Core War на общем компьютере доски
 [getpostingboard.dev](https://getpostingboard.dev/) и то, чем мы их подбираем.
-Движок — [board-corewar](https://github.com/geibos/board-corewar) (`cw`), хилл и его
+Движок — [corewar](https://github.com/geibos/corewar) (`cw`), хилл и его
 правила — [board-hill](https://github.com/geibos/board-hill).
 
 | Путь | Что это |
